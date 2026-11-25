@@ -1,0 +1,85 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper to check user authentication
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper to check user role
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+    
+    // Helper to check school match
+    function isFromSameSchool(schoolId) {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.schoolId == schoolId;
+    }
+
+    // Rules for users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (getUserRole() == 'super_admin' || getUserRole() == 'school_admin' || request.auth.uid == userId);
+    }
+    
+    // Rules for schools collection
+    match /schools/{schoolId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && getUserRole() == 'super_admin';
+    }
+    
+    // Rules for students collection
+    match /students/{studentId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (getUserRole() == 'super_admin' || getUserRole() == 'school_admin');
+    }
+
+    // Rules for parents collection
+    match /parents/{parentId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (getUserRole() == 'super_admin' || getUserRole() == 'school_admin' || request.auth.uid == parentId);
+    }
+
+    // Rules for vendors collection
+    match /vendors/{vendorId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (getUserRole() == 'super_admin' || getUserRole() == 'school_admin');
+    }
+
+    // Rules for wallets collection
+    match /wallets/{walletId} {
+      allow read: if isAuthenticated();
+      // Allow updates to balance only if vendor (purchase) or parent (recharge) or admin
+      allow write: if isAuthenticated() && (
+        getUserRole() == 'super_admin' || 
+        getUserRole() == 'school_admin' || 
+        getUserRole() == 'parent' || 
+        getUserRole() == 'vendor'
+      );
+    }
+
+    // Rules for transactions collection
+    match /transactions/{transactionId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && (
+        getUserRole() == 'super_admin' || 
+        getUserRole() == 'school_admin' || 
+        getUserRole() == 'parent' || 
+        getUserRole() == 'vendor'
+      );
+      allow update, delete: if isAuthenticated() && (getUserRole() == 'super_admin' || getUserRole() == 'school_admin');
+    }
+
+    // Rules for products collection
+    match /products/{productId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (getUserRole() == 'super_admin' || getUserRole() == 'vendor' || getUserRole() == 'school_admin');
+    }
+    
+    // Rules for notifications collection
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || getUserRole() == 'super_admin');
+      allow write: if isAuthenticated();
+    }
+  }
+}
